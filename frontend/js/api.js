@@ -1,6 +1,19 @@
-// One shared data interface. Replace these functions with fetch() calls
-// once the Spring Boot API endpoints and JSON payloads are agreed on.
-import { initMock, currentUser, demoSignIn, demoRegister, demoSignOut, demoUsers, demoRequests, demoCreateRequest, demoUpdateRequest } from './mockData.js';
+import {
+  initMock,
+  currentUser,
+  demoSignIn,
+  demoRegister,
+  demoSignOut,
+  demoUsers,
+  demoRequests,
+  demoCreateRequest,
+  demoUpdateRequest,
+  demoUpdateUserRole,
+  demoSetUserActive,
+  demoDeleteUser,
+  demoCreateStaff
+} from './mockData.js';
+
 
 export const USE_MOCK = true;
 export const API_BASE_URL = "http://localhost:8080";
@@ -29,16 +42,32 @@ async function request(method, endpoint, data) {
     ? await response.json()
     : null;
   if (!response.ok) {
-    const error = new Error(
-      result?.message || `HTTP Error: ${response.status}`
-    );
+    const messages = {
+      400: "Please check the entered information.",
+      401: "Invalid credentials or expired session.",
+      403: "You do not have permission to perform this action.",
+      404: "Requested resource was not found.",
+      409: "This information conflicts with an existing record."
+    };
+    let message;
+    if (response.status >= 500) {
+      message = "Server error. Please try again later.";
+    } else if (response.status === 400 || response.status === 409) {
+      message = result?.message || messages[response.status];
+    } else {
+      message = messages[response.status]
+        || result?.message
+        || `Request failed (${response.status}).`;
+    }
+    const error = new Error(message);
     error.status = response.status;
     throw error;
   }
   return result;
 }
-
-function requireApiAgreement() { throw new Error('Backend integration is not configured yet. Agree on endpoint URLs, authentication and response schemas with your backend team.'); }
+function requireApiAgreement() {
+  throw new Error('Backend integration is not configured yet. Agree on endpoint URLs, authentication and response schemas with your backend team.');
+}
 async function mockOrBackend(fn) { if (!USE_MOCK) return requireApiAgreement(); initMock(); return fn(); }
 
 export const api = {
@@ -78,9 +107,62 @@ export const api = {
   },
   getUsers: async () => {
     if (USE_MOCK) {
-      return mockOrBackend(demoUsers);
+      return mockOrBackend(() =>
+        demoUsers().filter(user => user.deleted !== true)
+      );
     }
     return await request("GET", "/api/users");
+  },
+  updateUserRole: async (userId, newRole) => {
+    if (USE_MOCK) {
+      return mockOrBackend(() =>
+        demoUpdateUserRole(userId, newRole)
+      );
+    }
+    return await request(
+      "PATCH",
+      `/api/users/${encodeURIComponent(userId)}/role`,
+      {
+        role: newRole
+      }
+    );
+  },
+  setUserActive: async (userId, active) => {
+    if (USE_MOCK) {
+      return mockOrBackend(() =>
+        demoSetUserActive(userId, active)
+      );
+    }
+    return await request(
+      "PATCH",
+      `/api/users/${encodeURIComponent(userId)}/status`,
+      {
+        active: active
+      }
+    );
+  },
+  deleteUser: async (userId) => {
+    if (USE_MOCK) {
+      return mockOrBackend(() =>
+        demoDeleteUser(userId)
+      );
+    }
+    return await request(
+      "DELETE",
+      `/api/users/${encodeURIComponent(userId)}`
+    );
+  },
+  createStaff: async (payload) => {
+    if (USE_MOCK) {
+      return mockOrBackend(() =>
+        demoCreateStaff(payload)
+      );
+    }
+    return await request(
+      "POST",
+      "/api/admin/staff",
+      payload
+    );
   },
   getRequests: async () => {
     if (USE_MOCK) {

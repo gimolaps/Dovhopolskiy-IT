@@ -35,18 +35,37 @@ export function initMock() {
 }
 export function currentUser() {
   const id = read(SESSION_KEY, null);
-  return read(USERS_KEY, []).find(u => u.id === id) || null;
+  const user = read(USERS_KEY, []).find(
+    u => u.id === id
+  );
+  if (!user || user.active === false || user.deleted === true) {
+    return null;
+  }
+  const { password, ...safeUser } = user;
+  return safeUser;
 }
 export function demoSignIn(email, password) {
-  const user = read(USERS_KEY, []).find(u => u.email.toLowerCase() === String(email).trim().toLowerCase() && u.password === password);
-  if (!user) throw new Error('Incorrect email or password.');
+  const user = read(USERS_KEY, []).find(u =>
+    u.deleted !== true &&
+    String(u.email).toLowerCase() === email.toLowerCase() &&
+    u.password === password
+  );
+  if (!user || user.active === false) {
+    throw new Error("Incorrect email or password.");
+  }
   write(SESSION_KEY, user.id);
   return { ...user, password: undefined };
 }
 export function demoRegister(data) {
   const users = read(USERS_KEY, []);
-  if (users.some(u => u.email.toLowerCase() === data.email.trim().toLowerCase())) throw new Error('An account with this email already exists.');
-  const user = { id: 'u' + Date.now().toString(36), firstName: data.firstName.trim(), lastName: data.lastName.trim(), email: data.email.trim(), password: data.password, role: 'Customer' };
+  const email = String(data.email ?? "").trim().toLowerCase();
+  if (users.some(u =>
+    String(u.email).toLowerCase() === email &&
+    u.deleted !== true
+  )) {
+    throw new Error("An account with this email already exists.");
+  }
+  const user = { id: 'u' + Date.now().toString(36), firstName: data.firstName.trim(), lastName: data.lastName.trim(), email: email, password: data.password, role: 'Customer' };
   users.push(user); write(USERS_KEY, users);
   return { ...user, password: undefined };
 }
@@ -85,9 +104,185 @@ export function demoCreateRequest(user, device, description, phone) {
   return record;
 }
 export function demoUpdateRequest(id, status) {
+  const technician = currentUser();
+  if (!technician || technician.role !== "Technician") {
+    throw new Error("Technician access required.");
+  }
   if (!STATUS.includes(status)) throw new Error('Unsupported repair status.');
   const requests = read(REQUESTS_KEY, []);
   const record = requests.find(r => r.id === id);
   if (!record) throw new Error('Request not found.');
   record.status = status; write(REQUESTS_KEY, requests); return record;
+}
+export function demoUpdateUserRole(userId, newRole) {
+  initMock();
+  const admin = currentUser();
+  if (!admin || admin.role !== "Administrator") {
+    throw new Error("Only administrators can change user roles.");
+  }
+  const allowedRoles = [
+    "Customer",
+    "Technician",
+    "Administrator"
+  ];
+  if (!allowedRoles.includes(newRole)) {
+    throw new Error("Invalid user role.");
+  }
+  const users = JSON.parse(
+    localStorage.getItem("serwis_it_demo_users_v1") || "[]"
+  );
+  const targetUser = users.find(
+    user => String(user.id) === String(userId)
+  );
+  if (!targetUser || targetUser.deleted === true) {
+    throw new Error("User not found.");
+  }
+  if (String(targetUser.id) === String(admin.id)) {
+    throw new Error("You cannot change your own role.");
+  }
+  const adminCount = users.filter(
+    user =>
+      user.role === "Administrator" &&
+      user.active !== false
+  ).length;
+  if (
+    targetUser.role === "Administrator" &&
+    targetUser.active !== false &&
+    newRole !== "Administrator" &&
+    adminCount <= 1
+  ) {
+    throw new Error("At least one active administrator is required.");
+  }
+  targetUser.role = newRole;
+  localStorage.setItem(
+    "serwis_it_demo_users_v1",
+    JSON.stringify(users)
+  );
+  const { password, ...safeUser } = targetUser;
+  return safeUser;
+}
+export function demoSetUserActive(userId, active) {
+  initMock();
+  const admin = currentUser();
+  if (!admin || admin.role !== "Administrator") {
+    throw new Error("Administrator access required.");
+  }
+  if (typeof active !== "boolean") {
+    throw new Error("Invalid account status.");
+  }
+  const users = read(USERS_KEY, []);
+  const targetUser = users.find(
+    u => String(u.id) === String(userId)
+  );
+  if (!targetUser || targetUser.deleted === true) {
+    throw new Error("User not found.");
+  }
+  if (String(targetUser.id) === String(admin.id)) {
+    throw new Error("You cannot deactivate or activate your own account.");
+  }
+  const activeAdmins = users.filter(
+    u =>
+      u.role === "Administrator" &&
+      u.active !== false &&
+      u.deleted !== true
+  ).length;
+  if (
+    active === false &&
+    targetUser.role === "Administrator" &&
+    targetUser.active !== false &&
+    activeAdmins <= 1
+  ) {
+    throw new Error("Cannot deactivate the last active administrator.");
+  }
+  targetUser.active = active;
+  write(USERS_KEY, users);
+  const { password, ...safeUser } = targetUser;
+  return safeUser;
+}
+export function demoDeleteUser(userId) {
+  initMock();
+  const admin = currentUser();
+  if (!admin || admin.role !== "Administrator") {
+    throw new Error("Administrator access required.");
+  }
+  const users = read(USERS_KEY, []);
+  const targetUser = users.find(
+    u => String(u.id) === String(userId)
+  );
+  if (!targetUser || targetUser.deleted === true) {
+    throw new Error("User not found.");
+  }
+  if (String(targetUser.id) === String(admin.id)) {
+    throw new Error("You cannot delete your own account.");
+  }
+  const activeAdmins = users.filter(
+    u =>
+      u.role === "Administrator" &&
+      u.active !== false &&
+      u.deleted !== true
+  ).length;
+  if (
+    targetUser.role === "Administrator" &&
+    targetUser.active !== false &&
+    activeAdmins <= 1
+  ) {
+    throw new Error("Cannot delete the last active administrator.");
+  }
+  targetUser.active = false;
+  targetUser.deleted = true;
+  targetUser.deletedAt = new Date().toISOString();
+  write(USERS_KEY, users);
+  return {
+    id: targetUser.id,
+    deleted: true
+  };
+}
+export function demoCreateStaff(payload) {
+  initMock();
+  const admin = currentUser();
+  if (!admin || admin.role !== "Administrator") {
+    throw new Error("Administrator access required.");
+  }
+  const firstName = String(payload.firstName ?? "").trim();
+  const lastName = String(payload.lastName ?? "").trim();
+  const email = String(payload.email ?? "").trim().toLowerCase();
+  const password = String(payload.password ?? "");
+  const role = payload.role;
+  if (!firstName || !lastName || !email) {
+    throw new Error("All fields are required.");
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error("Invalid email address.");
+  }
+  if (password.length < 8) {
+    throw new Error("Password must contain at least 8 characters.");
+  }
+  if (!["Technician", "Administrator"].includes(role)) {
+    throw new Error("Invalid staff role.");
+  }
+  const users = read(USERS_KEY, []);
+  if (users.some(u =>
+    String(u.email).toLowerCase() === email &&
+    u.deleted !== true
+  )) {
+    throw new Error("Email is already registered.");
+  }
+  let number = 1;
+  while (users.some(u => String(u.id) === `u${number}`)) {
+    number++;
+  }
+  const staff = {
+    id: `u${number}`,
+    firstName,
+    lastName,
+    email,
+    password,
+    role,
+    active: true,
+    deleted: false
+  };
+  users.push(staff);
+  write(USERS_KEY, users);
+  const { password: storedPassword, ...safeStaff } = staff;
+  return safeStaff;
 }

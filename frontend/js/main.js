@@ -1,4 +1,4 @@
-import { api } from './api.js';
+import { api, USE_MOCK } from './api.js';
 
 const page = document.body.dataset.page || 'home';
 const fromPages = location.pathname.includes('/pages/');
@@ -7,9 +7,12 @@ const path = (name) => name === 'home' ? (fromPages ? '../index.html' : './index
 const e = (value) => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const link = (name, text, cls = '') => `<a class="${cls}" href="${path(name)}">${text}</a>`;
 const dashboardFor = (user) => {
-  if (user.role === "Customer") return "client";
-  if (user.role === "Technician") return "technician";
-  return "admin";
+  const routes = {
+    Customer: "client",
+    Technician: "technician",
+    Administrator: "admin"
+  };
+  return routes[user?.role] ?? null;
 };
 const icon = (name, size = 18) => {
   const paths = {
@@ -60,11 +63,12 @@ function initTheme() {
   });
 }
 function landing(user) {
-  const destination = user ? dashboardFor(user) : "register";
-  const topText = user
+  const dashboard = dashboardFor(user);
+  const destination = dashboard || "register";
+  const topText = dashboard
     ? icon("users", 16) + " Account"
     : "Get Started";
-  const ctaText = user
+  const ctaText = dashboard
     ? "Go to Dashboard"
     : "Get Started";
   return `
@@ -97,7 +101,56 @@ function landing(user) {
       <article class="step-card"><span class="step-number">03</span><div class="step-icon">${icon('check', 24)}</div><h3>Track Your Repair</h3><p>Follow its progress from new to completed.</p></article>
     </div></div></section>
     <section class="section"><div class="container"><div class="section-heading"><span class="kicker">DEVICES</span><h2>What We Help You Manage</h2><p>Illustrative device types you can create repair requests for.</p></div><div class="devices-grid"><div class="device-card">${icon('monitor', 25)}<strong>Desktop computers</strong></div><div class="device-card">${icon('laptop', 25)}<strong>Laptops</strong></div><div class="device-card">${icon('phone', 25)}<strong>Other electronic devices</strong></div></div></div></section>
-    <section class="section section-tinted"><div class="container"><div class="section-heading"><span class="kicker"></span><h2>What Our Customers Say</h2><p>Customer reviews, they go round in circles</p></div><div class="reviews-grid"><article class="review-card"><p>“Submitting a request was straightforward, and I could see the status at a glance.”</p><div class="review-author"><span class="avatar">SK</span><span><strong>Sarah K.</strong><small></small></span></div></article><article class="review-card"><p>“The request history keeps every repair organized in one place.”</p><div class="review-author"><span class="avatar">JM</span><span><strong>James M.</strong><small></small></span></div></article><article class="review-card"><p>“The dashboard makes it easier to find which devices need attention.”</p><div class="review-author"><span class="avatar">AL</span><span><strong>Alex L.</strong><small></small></span></div></article></div></div></section>
+<section class="section section-tinted">
+    <div class="container">
+        <div class="section-heading">
+            <span class="kicker"></span>
+            <h2>What Our Customers Say</h2>
+            <p>Customer reviews, they go round in circles</p>
+        </div>
+        <div class="reviews-grid">
+            <article class="review-card">
+                <p>
+                    “Submitting a request was straightforward, and I could
+                    see the status at a glance.”
+                </p>
+                <div class="review-author">
+                    <span class="avatar">SK</span>
+                    <span>
+                        <strong>Sarah K.</strong>
+                        <small></small>
+                    </span>
+                </div>
+            </article>
+            <article class="review-card">
+                <p>
+                    “The request history keeps every repair organized
+                    in one place.”
+                </p>
+                <div class="review-author">
+                    <span class="avatar">JM</span>
+                    <span>
+                        <strong>James M.</strong>
+                        <small></small>
+                    </span>
+                </div>
+            </article>
+            <article class="review-card">
+                <p>
+                    “The dashboard makes it easier to find which devices
+                    need attention.”
+                </p>
+                <div class="review-author">
+                    <span class="avatar">AL</span>
+                    <span>
+                        <strong>Alex L.</strong>
+                        <small></small>
+                    </span>
+                </div>
+            </article>
+        </div>
+    </div>
+</section>
     <section class="section"><div class="container faq-container"><div class="section-heading"><span class="kicker">FAQ</span><h2>Frequently Asked Questions</h2><p></p></div><div class="faq-list">
       <details><summary>How do I submit a repair request?</summary><p>Create an account, sign in, and choose New Request. Select your device type and describe the issue.</p></details>
       <details><summary>Can I check my repair status?</summary><p>Yes. Sign in to view whether a request is New, In Progress, or Completed.</p></details>
@@ -143,24 +196,127 @@ function metrics(records, admin = false, users = []) {
 }
 function requestRows(records, users, role) {
   if (!records.length) return '<div class="empty-state">No requests found. Try a different status filter.</div>';
-  return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Request ID</th>${role === 'Customer' ? '' : '<th>Customer</th>'}<th>Device Type</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>${records.map(r => `<tr><td><strong>${e(r.id)}</strong></td>${role === 'Customer' ? '' : `<td>${e((users.find(u => u.id === r.userId) || {}).firstName || 'Unknown')} ${e((users.find(u => u.id === r.userId) || {}).lastName || '')}</td>`}<td>${e(r.device)}</td><td>${todayDate(r.createdAt)}</td><td>${statusBadge(r.status)}</td><td>${link('request-details', 'View ' + icon('chevron', 15), 'table-link').replace('href="' + path('request-details') + '"', 'href="' + path('request-details') + '?id=' + encodeURIComponent(r.id) + '"')}</td></tr>`).join('')}</tbody></table></div>`;
+  return `
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Request ID</th>
+                    ${role === 'Customer' ? '' : '<th>Customer</th>'}
+                    <th>Device Type</th>
+                    <th>Date</th>
+                    <th>Status</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                ${records.map(r => `
+                    <tr>
+                        <td>
+                            <strong>${e(r.id)}</strong>
+                        </td>
+                        ${role === 'Customer' ? '' : `
+                            <td>
+                                ${e((users.find(u => u.id === r.userId) || {}).firstName || 'Deleted or unavailable user')}
+                                ${e((users.find(u => u.id === r.userId) || {}).lastName || '')}
+                            </td>
+                        `}
+                        <td>${e(r.device)}</td>
+                        <td>${todayDate(r.createdAt)}</td>
+                        <td>${statusBadge(r.status)}</td>
+                        <td>
+                            ${link(
+    'request-details',
+    'View ' + icon('chevron', 15),
+    'table-link'
+  ).replace(
+    'href="' + path('request-details') + '"',
+    'href="' + path('request-details') + '?id=' + encodeURIComponent(r.id) + '"'
+  )}
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    </div>
+`;
 }
 function tableCard(records, users, role, title = 'Recent Requests', filters = false) {
   const filtersMarkup = filters ? `<div class="table-tools"><label class="search-wrap"><span class="sr-only">Search requests</span>${icon('search', 16)}<input id="request-search" type="search" placeholder="Search requests" autocomplete="off"></label><label class="filter-wrap"><span class="sr-only">Filter by status</span><select id="status-filter" aria-label="Filter requests by status"><option value="">All statuses</option><option>New</option><option>In Progress</option><option>Completed</option></select></label></div>` : '';
-  return `<section class="panel"><div class="panel-header"><div><h2>${e(title)}</h2><p>${records.length} request${records.length === 1 ? '' : 's'} displayed · Sample mock data</p></div>${filtersMarkup || (role === 'Customer' ? link('requests', 'View all ' + icon('arrow', 16), 'text-link') : '')}</div><div id="requests-table">${requestRows(records, users, role)}</div></section>`;
+  return `<section class="panel"><div class="panel-header"><div><h2>${e(title)}</h2><p>${records.length} request${records.length === 1 ? '' : 's'} displayed${USE_MOCK ? '· Sample mock data' : ''}</p></div>${filtersMarkup || (role === 'Customer' ? link('requests', 'View all ' + icon('arrow', 16), 'text-link') : '')}</div><div id="requests-table">${requestRows(records, users, role)}</div></section>`;
 }
 function technicianDashboard(user, requests, users) {
   const statuses = ['New', 'In Progress', 'Completed'];
   const counts = `<div class="metric-grid metric-three">${statuses.map((status, i) => `<div class="metric-card"><span>${i === 0 ? 'New Requests' : e(status)}</span><strong class="metric-${['new', 'progress', 'completed'][i]}">${requests.filter(r => r.status === status).length}</strong><small>Repair status</small></div>`).join('')}</div>`;
   const chosen = requests[0]; const owner = users.find(u => u.id === chosen?.userId);
-  const details = chosen ? `<section class="panel technician-detail"><div class="panel-header"><div><h2>Request Details — ${e(chosen.id)}</h2><p>${owner ? e(owner.firstName + ' ' + owner.lastName + ' · ' + owner.email) : 'Customer'} · ${e(chosen.device)}</p></div>${statusBadge(chosen.status)}</div><div class="panel-body tech-detail-grid"><div><span class="detail-label">Problem Description</span><p class="tech-description">${e(chosen.description)}</p><a class="text-link" href="${path('request-details')}?id=${encodeURIComponent(chosen.id)}">View full details ${icon('arrow', 15)}</a></div><form id="status-form" data-request-id="${e(chosen.id)}" class="status-form"><label for="status">Status</label><select id="status" name="status">${statuses.map(st => `<option ${st === chosen.status ? 'selected' : ''}>${st}</option>`).join('')}</select><button class="btn btn-primary" type="submit">Save Changes</button></form></div></section>` : '';
+
+  const details = chosen ? `
+    <section class="panel technician-detail">
+        <div class="panel-header">
+            <div>
+                <h2>Request Details — ${e(chosen.id)}</h2>
+                <p>
+                    ${owner
+      ? e(owner.firstName + ' ' + owner.lastName + ' · ' + owner.email)
+      : 'Customer'
+    }
+                    · ${e(chosen.device)}
+                </p>
+            </div>
+            ${statusBadge(chosen.status)}
+        </div>
+        <div class="panel-body tech-detail-grid">
+            <div>
+                <span class="detail-label">Problem Description</span>
+                <p class="tech-description">
+                    ${e(chosen.description)}
+                </p>
+                <a
+                    class="text-link"
+                    href="${path('request-details')}?id=${encodeURIComponent(chosen.id)}"
+                >
+                    View full details ${icon('arrow', 15)}
+                </a>
+            </div>
+            <form
+                id="status-form"
+                data-request-id="${e(chosen.id)}"
+                class="status-form"
+            >
+                <label for="status">Status</label>
+                <select id="status" name="status">
+                    ${statuses.map(st => `
+                        <option ${st === chosen.status ? 'selected' : ''}>
+                            ${st}
+                        </option>
+                    `).join('')}
+                </select>
+                <button class="btn btn-primary" type="submit">
+                    Save Changes
+                </button>
+            </form>
+        </div>
+    </section>
+` : '';
   return shell(user, counts + tableCard(requests.slice(0, 7), users, 'Technician', 'Repair Requests', true) + details, 'Technician Dashboard', 'Review incoming repair requests and update their status.');
 }
+
 function adminDashboard(user, requests, users) {
-  const overview = metrics(requests, true, users) + tableCard(requests.slice(0, 7), users, 'Administrator', 'Requests Overview', true);
-  const miniUsers = `<section class="panel users-overview"><div class="panel-header"><div><h2>User Management</h2><p>Customer and staff accounts · Sample mock data</p></div>${link('users', 'View all ' + icon('arrow', 16), 'text-link')}</div><div class="table-wrap"><table class="data-table"><thead><tr><th>User Name</th><th>Email</th><th>Role</th><th>Manage</th></tr></thead><tbody>${users.slice(0, 5).map(u => `<tr><td><strong>${e(u.firstName + ' ' + u.lastName)}</strong></td><td>${e(u.email)}</td><td><span class="role-pill">${e(u.role)}</span></td><td>${link('users', 'View', 'table-link')}</td></tr>`).join('')}</tbody></table></div></section>`;
-  const placeholder = `<section class="panel admin-placeholder"><div class="panel-header"><div><h2>User Detail — placeholder</h2><p>Select a user to view their profile and available management options. Operations will be defined once backend roles and permissions are agreed.</p></div></div><div class="panel-body"><label class="field">Role (placeholder)<select disabled><option>Customer</option></select></label><button class="btn btn-secondary btn-sm" type="button" disabled>Save (disabled)</button></div></section>`;
-  return shell(user, overview + miniUsers + placeholder, 'Administrator Dashboard', 'Overview of users and repair requests across the service.');
+  const overview =
+    metrics(requests, true, users) +
+    tableCard(
+      requests.slice(0, 7),
+      users,
+      "Administrator",
+      "Requests Overview",
+      true
+    );
+  return shell(
+    user,
+    overview,
+    "Administrator Dashboard",
+    "Overview of users and repair requests across the service."
+  );
 }
 function roleHome(user, requests, users) {
   if (user.role === 'Technician') return technicianDashboard(user, requests, users);
@@ -171,7 +327,73 @@ function roleHome(user, requests, users) {
   return shell(user, hero + metrics(records) + tableCard(records.slice(0, 6), users, 'Customer', 'Recent Requests'), 'Dashboard', 'Keep track of every repair in one place.');
 }
 function newRequestPage(user) {
-  return shell(user, `<div class="form-panel panel"><div class="panel-header"><div><h2>Device Information</h2><p>Tell us what device needs attention.</p></div></div><form class="form-stack panel-body" id="request-form" novalidate><div id="form-error" class="form-error" role="alert" hidden></div><div class="field"><label for="phone">Phone Number *</label><input type="tel" id="phone" name="phone" placeholder="+48 123 456 789" autocomplete="tel" required></div><div class="field"><label for="device">Device Type</label><select id="device" name="device" required><option value="">Select a device</option><option>Laptop</option><option>Desktop</option><option>Tablet</option><option>Smartphone</option><option>Other Electronics</option></select></div><div class="field"><label for="description">Problem Description</label><textarea id="description" name="description" rows="6" placeholder="Describe the problem with your device..." required maxlength="2000" minlength="10"></textarea><small>Provide at least 10 characters to help the technician understand the issue.</small></div><div class="form-actions"><button type="submit" class="btn btn-primary">Submit Request ${icon('arrow', 17)}</button>${link('client', 'Cancel', 'btn btn-secondary')}</div></form><div id="request-success" class="success-panel panel-body" hidden></div></div>`, 'New Repair Request', 'Describe the issue and submit a service request.');
+  return shell(
+    user,
+    `
+    <div class="form-panel panel">
+        <div class="panel-header">
+            <div>
+                <h2>Device Information</h2>
+                <p>Tell us what device needs attention.</p>
+            </div>
+        </div>
+        <form class="form-stack panel-body" id="request-form" novalidate>
+            <div id="form-error" class="form-error" role="alert" hidden></div>
+            <div class="field">
+                <label for="phone">Phone Number *</label>
+                <input
+                    type="tel"
+                    id="phone"
+                    name="phone"
+                    placeholder="+48 123 456 789"
+                    autocomplete="tel"
+                    required
+                >
+            </div>
+            <div class="field">
+                <label for="device">Device Type</label>
+                <select id="device" name="device" required>
+                    <option value="">Select a device</option>
+                    <option>Laptop</option>
+                    <option>Desktop</option>
+                    <option>Tablet</option>
+                    <option>Smartphone</option>
+                    <option>Other Electronics</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="description">Problem Description</label>
+                <textarea
+                    id="description"
+                    name="description"
+                    rows="6"
+                    placeholder="Describe the problem with your device..."
+                    required
+                    maxlength="2000"
+                    minlength="10"
+                ></textarea>
+                <small>
+                    Provide at least 10 characters to help the technician
+                    understand the issue.
+                </small>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">
+                    Submit Request ${icon('arrow', 17)}
+                </button>
+                ${link('client', 'Cancel', 'btn btn-secondary')}
+            </div>
+        </form>
+        <div
+            id="request-success"
+            class="success-panel panel-body"
+            hidden
+        ></div>
+    </div>
+    `,
+    'New Repair Request',
+    'Describe the issue and submit a service request.'
+  );
 }
 function requestListPage(user, requests, users) {
   const records = user.role === 'Customer' ? requests.filter(r => r.userId === user.id) : requests;
@@ -183,34 +405,571 @@ function detailsPage(user, requests, users) {
   if (!request) return shell(user, `<div class="panel panel-body"><p>Request not found or access is not allowed.</p>${link(user.role === 'Customer' ? 'requests' : 'requests', 'Back to Requests', 'btn btn-secondary')}</div>`, 'Request Details');
   const customer = users.find(u => u.id === request.userId);
   const steps = ['New', 'In Progress', 'Completed']; const current = steps.indexOf(request.status);
-  const statusEdit = user.role === 'Technician' ? `<div class="panel"><div class="panel-header"><div><h2>Update Repair Status</h2><p>Set the latest repair status for this request.</p></div></div><form class="panel-body status-form" id="status-form"><label for="status">Repair Status</label><div class="form-actions"><select id="status" name="status">${steps.map(s => `<option ${s === request.status ? 'selected' : ''}>${s}</option>`).join('')}</select><button class="btn btn-primary" type="submit">Save Changes</button></div></form></div>` : '';
-  return shell(user, `<div class="detail-grid"><section class="panel"><div class="panel-header"><div><span class="kicker">${e(request.id)}</span><h2>${e(request.device)} Repair</h2></div>${statusBadge(request.status)}</div><div class="panel-body detail-body"><div><span class="detail-label">Problem Description</span><p>${e(request.description)}</p></div><div class="detail-pair"></div>${request.phone ? `<div><span class="detail-label">Contact Phone</span><p>${e(request.phone)}</p></div>` : ""}<div class="detail-pair"><div><span class="detail-label">Submitted</span><strong>${todayDate(request.createdAt)}</strong></div><div><span class="detail-label">Device Type</span><strong>${e(request.device)}</strong></div>${user.role !== 'Customer' ? `<div><span class="detail-label">Customer</span><strong>${e(customer ? customer.firstName + ' ' + customer.lastName : 'Unknown')}</strong></div>` : ''}</div><hr><h3>Repair Progress</h3><div class="progress-steps">${steps.map((s, i) => `<div class="progress-step ${i <= current ? 'progress-step-active' : ''}"><span class="progress-circle">${i < current ? icon('check', 15) : i + 1}</span><strong>${s}</strong></div>`).join('')}</div></div></section>${statusEdit}</div><div class="under-panel">${link('requests', '← Back to Requests', 'text-link')}</div>`, 'Request Details', 'Review the information and latest repair status.');
+  const statusEdit = user.role === 'Technician' ? `
+    <div class="panel">
+        <div class="panel-header">
+            <div>
+                <h2>Update Repair Status</h2>
+                <p>Set the latest repair status for this request.</p>
+            </div>
+        </div>
+        <form class="panel-body status-form" id="status-form">
+            <label for="status">Repair Status</label>
+            <div class="form-actions">
+                <select id="status" name="status">
+                    ${steps.map(s => `
+                        <option ${s === request.status ? 'selected' : ''}>
+                            ${s}
+                        </option>
+                    `).join('')}
+                </select>
+                <button class="btn btn-primary" type="submit">
+                    Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+` : '';
+  return shell(
+    user,
+    `
+    <div class="detail-grid">
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <span class="kicker">${e(request.id)}</span>
+                    <h2>${e(request.device)} Repair</h2>
+                </div>
+                ${statusBadge(request.status)}
+            </div>
+            <div class="panel-body detail-body">
+                <div>
+                    <span class="detail-label">Problem Description</span>
+                    <p>${e(request.description)}</p>
+                </div>
+                ${request.phone ? `
+                    <div>
+                        <span class="detail-label">Contact Phone</span>
+                        <p>${e(request.phone)}</p>
+                    </div>
+                ` : ""}
+                <div class="detail-pair">
+                    <div>
+                        <span class="detail-label">Submitted</span>
+                        <strong>${todayDate(request.createdAt)}</strong>
+                    </div>
+                    <div>
+                        <span class="detail-label">Device Type</span>
+                        <strong>${e(request.device)}</strong>
+                    </div>
+                    ${user.role !== 'Customer' ? `
+                        <div>
+                            <span class="detail-label">Customer</span>
+                            <strong>
+                                ${e(customer ? customer.firstName + ' ' + customer.lastName : 'Deleted or unavailable user')}
+                            </strong>
+                        </div>
+                    ` : ''}
+                </div>
+                <hr>
+                <h3>Repair Progress</h3>
+                <div class="progress-steps">
+                    ${steps.map((s, i) => `
+                        <div class="progress-step ${i <= current ? 'progress-step-active' : ''}">
+                            <span class="progress-circle">
+                                ${i < current ? icon('check', 15) : i + 1}
+                            </span>
+                            <strong>${s}</strong>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </section>
+        ${statusEdit}
+    </div>
+    <div class="under-panel">
+        ${link('requests', '← Back to Requests', 'text-link')}
+    </div>
+    `,
+    'Request Details',
+    'Review the information and latest repair status.'
+  );
 }
-function usersPage(user, users) { return shell(user, `<section class="panel"><div class="panel-header"><div><h2>All Users</h2><p></p></div><span class="count-pill">${users.length} users</span></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th></tr></thead><tbody>${users.map(u => `<tr><td><strong>${e(u.firstName)} ${e(u.lastName)}</strong></td><td>${e(u.email)}</td><td><span class="role-pill">${e(u.role)}</span></td></tr>`).join('')}</tbody></table></div></section><p class="helper-note">Editing, deleting users and role assignment require backend authorization rules. This demo shows a read-only user list.</p>`, 'User Management', 'View the application accounts.'); }
-function showError(message) { const el = document.getElementById('form-error'); if (el) { el.textContent = message; el.hidden = false; } else toast(message, true); }
+function usersPage(user, users) {
+  const roles = [
+    "Customer",
+    "Technician",
+    "Administrator"
+  ];
+  const rows = users.map(u => {
+    const isOwnAccount = String(u.id) === String(user.id);
+    const isActive = u.active !== false;
+    const roleOptions = roles.map(role => `
+            <option
+                value="${role}"
+                ${u.role === role ? "selected" : ""}
+            >
+                ${role}
+            </option>
+        `).join("");
+    const actions = isOwnAccount
+      ? `<span>Own account</span>`
+      : `
+        <div class="account-actions">
+            <form class="role-editor"
+                  data-role-form
+                  data-user-id="${e(u.id)}">
+                <select name="role">
+                    ${roleOptions}
+                </select>
+                <button class="btn btn-primary btn-sm"
+                        type="submit">
+                    Save
+                </button>
+            </form>
+            <form data-active-form
+                  data-user-id="${e(u.id)}">
+                <button class="btn btn-outline btn-sm"
+                        type="submit">
+                    ${isActive ? "Deactivate" : "Activate"}
+                </button>
+            </form>
+            <button class="btn btn-danger btn-sm"
+                    type="button"
+                    data-delete-user
+                    data-user-id="${e(u.id)}">
+                Delete
+            </button>
+            </div>
+        </div>
+    `;
+    return `
+            <tr data-user-row>
+                <td>
+                    <strong>${e(u.firstName)} ${e(u.lastName)}</strong>
+                </td>
+                <td>${e(u.email)}</td>
+                <td>
+                    <span class="role-pill" data-current-role>
+                        ${e(u.role)}
+                    </span>
+                </td>
+                <td>
+                    <span class="role-pill" data-active-status>
+                        ${isActive ? "Active" : "Inactive"}
+                    </span>
+                </td>
+                <td>${actions}</td>
+            </tr>
+        `;
+  }).join("");
+  const content = `
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>All Users</h2>
+                    <p>Manage user roles</p>
+                </div>
+                <div class="staff-header-actions">
+                  <span class="count-pill" data-users-count>
+                    ${users.length} users
+                  </span>
+                  <button
+                    type="button"
+                    class="btn btn-primary btn-sm"
+                    id="add-staff-toggle">
+                    Add Staff
+                  </button>
+                </div>
+            </div>
+            <form id="staff-form" class="staff-form" hidden>
+                <h3>Create Staff Account</h3>
+                <div class="staff-form-fields">
+                    <div class="field">
+                        <label for="staff-first-name">First Name</label>
+                        <input id="staff-first-name"
+                              name="firstName"
+                              maxlength="80"
+                              required>
+                    </div>
+                    <div class="field">
+                        <label for="staff-last-name">Last Name</label>
+                        <input id="staff-last-name"
+                              name="lastName"
+                              maxlength="80"
+                              required>
+                    </div>
+                    <div class="field">
+                        <label for="staff-email">Email</label>
+                        <input id="staff-email"
+                              type="email"
+                              name="email"
+                              autocomplete="off"
+                              required>
+                    </div>
+                    <div class="field">
+                        <label for="staff-password">Password</label>
+                        <input id="staff-password"
+                              type="password"
+                              name="password"
+                              minlength="8"
+                              autocomplete="new-password"
+                              required>
+                    </div>
+                    <div class="field">
+                        <label for="staff-role">Role</label>
+                        <select id="staff-role" name="role">
+                            <option value="Technician">Technician</option>
+                            <option value="Administrator">Administrator</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">
+                        Create Staff
+                    </button>
+                    <button type="button"
+                            id="cancel-staff"
+                            class="btn btn-secondary">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+            
+<div class="user-filters">
+    <div class="field">
+        <label for="user-search">Search Users</label>
+        <input
+            id="user-search"
+            type="search"
+            placeholder="Search by name or email..."
+            autocomplete="off"
+        >
+    </div>
+    <div class="field">
+        <label for="user-role-filter">Role</label>
+        <select id="user-role-filter">
+            <option value="">All Roles</option>
+            <option value="Customer">Customer</option>
+            <option value="Technician">Technician</option>
+            <option value="Administrator">Administrator</option>
+        </select>
+    </div>
+    <div class="field">
+        <label for="user-status-filter">Status</label>
+        <select id="user-status-filter">
+            <option value="">All Statuses</option>
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+        </select>
+    </div>
+</div>
+<p class="user-filter-summary" id="user-filter-summary">
+    Showing ${users.length} of ${users.length} users
+</p>
+<div class="table-wrap" id="users-table">
+    <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>
+            </div>
+            <p id="user-filter-empty"
+              class="user-filter-empty"
+              hidden>
+                No users match your search or filters.
+            </p>
+        </section>
+    `;
+  return shell(
+    user,
+    content,
+    "User Management",
+    "Manage application accounts."
+  );
+}
+function showError(message) {
+  const el = document.getElementById('form-error');
+  if (el) {
+    el.textContent = message; el.hidden = false;
+  } else toast(message, true);
+}
 function hookAuth(type) {
-  document.querySelectorAll('[data-reveal]').forEach(btn => btn.addEventListener('click', () => { const inp = document.getElementById(btn.dataset.reveal); inp.type = inp.type === 'password' ? 'text' : 'password'; btn.textContent = inp.type === 'password' ? 'Show' : 'Hide'; }));
+  document.querySelectorAll('[data-reveal]').forEach(btn => btn.addEventListener('click', () => {
+    const inp = document.getElementById(btn.dataset.reveal);
+    inp.type = inp.type === 'password' ? 'text' : 'password';
+    btn.textContent = inp.type === 'password' ? 'Show' : 'Hide';
+  }));
   document.querySelectorAll('[data-demo]').forEach(btn => btn.addEventListener('click', () => { document.getElementById('email').value = btn.dataset.demo; document.getElementById('password').value = 'demo12345'; }));
   document.querySelector('#auth-form')?.addEventListener('submit', async event => {
-    event.preventDefault(); const form = event.currentTarget; const values = Object.fromEntries(new FormData(form));
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = Object.fromEntries(new FormData(form));
     document.getElementById('form-error').hidden = true;
-    if (!form.checkValidity()) { form.reportValidity(); return; }
+    if (!form.checkValidity()) {
+      form.reportValidity();
+      return;
+    }
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (submitButton.disabled) {
+      return;
+    }
+    const originalContent = submitButton.innerHTML;
+    submitButton.disabled = true;
+    submitButton.textContent = type === "register"
+      ? "Creating account..."
+      : "Signing in...";
+    form.setAttribute("aria-busy", "true");
     try {
       if (type === 'register') {
-        if (values.password !== values.confirmPassword) throw new Error('Passwords do not match.');
-        await api.register(values);
+        if (values.password !== values.confirmPassword) {
+          throw new Error('Passwords do not match.');
+        }
+        const registerData = {
+          firstName: values.firstName.trim(),
+          lastName: values.lastName.trim(),
+          email: values.email.trim(),
+          password: values.password
+        };
+        await api.register(registerData);
         form.hidden = true;
         const success = document.getElementById('form-success'); success.hidden = false;
         success.innerHTML = `<span class="success-icon">${icon('check', 24)}</span><h2>Account created</h2><p>Your customer account is ready. Sign in to continue.</p>${link('login', 'Go to Sign In ' + icon('arrow', 17), 'btn btn-primary')}`;
       } else {
-        const user = await api.signIn(values.email, values.password);
-        location.href = path(user.role === 'Customer' ? 'client' : user.role === 'Technician' ? 'technician' : 'admin');
+        await api.signIn(values.email, values.password);
+        const user = await api.getCurrentUser();
+        if (!user) {
+          throw new Error("Unable to load user session.");
+        }
+        const dashboard = dashboardFor(user);
+        if (!dashboard) {
+          throw new Error("Unsupported user role.");
+        }
+        location.href = path(dashboard);
       }
-    } catch (err) { showError(err.message); }
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      submitButton.disabled = false;
+      submitButton.innerHTML = originalContent;
+      form.removeAttribute("aria-busy");
+    }
   });
 }
 function hookWorkspace(user, requests, users) {
-  document.querySelector('[data-signout]')?.addEventListener('click', async () => { await api.signOut(); location.href = path('login'); });
+  document.querySelectorAll("[data-role-form]").forEach(form => {
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      const userId = form.dataset.userId;
+      const select = form.elements.namedItem("role");
+      const newRole = select.value;
+      const row = form.closest("tr");
+      const roleBadge = row.querySelector("[data-current-role]");
+      const previousRole = roleBadge.textContent.trim();
+      if (newRole === previousRole) {
+        toast("Role has not changed.");
+        return;
+      }
+      const button = form.querySelector('button[type="submit"]');
+      if (button.disabled) {
+        return;
+      }
+      button.disabled = true;
+      button.textContent = "Saving...";
+      try {
+        const updatedUser = await api.updateUserRole(
+          userId,
+          newRole
+        );
+        roleBadge.textContent = updatedUser.role;
+        refreshUserFilters();
+        toast("User role updated successfully.");
+      } catch (err) {
+        select.value = previousRole;
+        toast(err.message, true);
+      } finally {
+        button.disabled = false;
+        button.textContent = "Save";
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-active-form]").forEach(form => {
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      const userId = form.dataset.userId;
+      const row = form.closest("tr");
+      const statusBadge = row.querySelector(
+        "[data-active-status]"
+      );
+      const isActive =
+        statusBadge.textContent.trim() === "Active";
+      const newActive = !isActive;
+      const message = newActive
+        ? "Activate this user?"
+        : "Deactivate this user?";
+      if (!confirm(message)) {
+        return;
+      }
+      const button = form.querySelector(
+        'button[type="submit"]'
+      );
+      if (button.disabled) {
+        return;
+      }
+      button.disabled = true;
+      button.textContent = newActive
+        ? "Activating..."
+        : "Deactivating...";
+      try {
+        const updatedUser = await api.setUserActive(
+          userId,
+          newActive
+        );
+        statusBadge.textContent = updatedUser.active
+          ? "Active"
+          : "Inactive";
+        refreshUserFilters();
+        toast(
+          updatedUser.active
+            ? "Account activated successfully."
+            : "Account deactivated successfully."
+        );
+      } catch (err) {
+        toast(err.message, true);
+      } finally {
+        button.disabled = false;
+        button.textContent =
+          statusBadge.textContent.trim() === "Active"
+            ? "Deactivate"
+            : "Activate";
+      }
+    });
+  });
+  document.querySelectorAll("[data-delete-user]").forEach(button => {
+    const userSearch = document.querySelector("#user-search");
+    const userRoleFilter = document.querySelector("#user-role-filter");
+    const userStatusFilter = document.querySelector("#user-status-filter");
+    const refreshUserFilters = () => {
+      const query = (userSearch?.value || "")
+        .trim()
+        .toLowerCase();
+      const selectedRole = userRoleFilter?.value || "";
+      const selectedStatus = userStatusFilter?.value || "";
+      const rows = document.querySelectorAll(
+        "#users-table tr[data-user-row]"
+      );
+      let visibleCount = 0;
+      rows.forEach(row => {
+        const name = row.cells[0].textContent.trim();
+        const email = row.cells[1].textContent.trim();
+        const role = row.querySelector(
+          "[data-current-role]"
+        ).textContent.trim();
+        const status = row.querySelector(
+          "[data-active-status]"
+        ).textContent.trim();
+        const searchText = `${name} ${email}`.toLowerCase();
+        const matchesSearch = searchText.includes(query);
+        const matchesRole =
+          !selectedRole || role === selectedRole;
+        const matchesStatus =
+          !selectedStatus || status === selectedStatus;
+        const matches =
+          matchesSearch &&
+          matchesRole &&
+          matchesStatus;
+        row.hidden = !matches;
+        if (matches) {
+          visibleCount++;
+        }
+      });
+      const summary = document.querySelector(
+        "#user-filter-summary"
+      );
+      if (summary) {
+        summary.textContent =
+          `Showing ${visibleCount} of ${rows.length} users`;
+      }
+      const emptyMessage = document.querySelector(
+        "#user-filter-empty"
+      );
+      if (emptyMessage) {
+        emptyMessage.hidden = visibleCount !== 0;
+      }
+    };
+    userSearch?.addEventListener("input", refreshUserFilters);
+    userRoleFilter?.addEventListener("change", refreshUserFilters);
+    userStatusFilter?.addEventListener("change", refreshUserFilters);
+    if (userSearch) {
+      refreshUserFilters();
+    }
+    button.addEventListener("click", async () => {
+      if (button.disabled) {
+        return;
+      }
+      const userId = button.dataset.userId;
+      const confirmed = confirm(
+        "Delete this user? The account will be hidden, but repair history will be preserved."
+      );
+      if (!confirmed) {
+        return;
+      }
+      const row = button.closest("tr");
+      button.disabled = true;
+      button.textContent = "Deleting...";
+      try {
+        await api.deleteUser(userId);
+        const index = users.findIndex(
+          u => String(u.id) === String(userId)
+        );
+        if (index !== -1) {
+          users.splice(index, 1);
+        }
+        row.remove();
+        refreshUserFilters();
+        const count = document.querySelector(
+          "[data-users-count]"
+        );
+        if (count) {
+          count.textContent = `${users.length} users`;
+        }
+        toast("User deleted successfully.");
+      } catch (err) {
+        toast(err.message, true);
+        button.disabled = false;
+        button.textContent = "Delete";
+      }
+    });
+  });
+  document.querySelector('[data-signout]')?.addEventListener('click', async event => {
+    const button = event.currentTarget;
+    if (button.disabled) {
+      return;
+    }
+    const originalContent = button.innerHTML;
+    button.disabled = true;
+    button.textContent = "Signing out...";
+    button.setAttribute("aria-busy", "true");
+    try {
+      await api.signOut();
+      location.href = path("login");
+    } catch (err) {
+      toast(err.message || "Unable to sign out.", true);
+      button.disabled = false;
+      button.innerHTML = originalContent;
+      button.removeAttribute("aria-busy");
+    }
+  });
   document.querySelector('[data-nav-toggle]')?.addEventListener('click', () => document.body.classList.add('nav-open'));
   document.querySelector('[data-nav-close]')?.addEventListener('click', () => document.body.classList.remove('nav-open'));
   const filter = document.querySelector('#status-filter');
@@ -230,41 +989,121 @@ function hookWorkspace(user, requests, users) {
     search?.addEventListener('input', refresh);
   }
   document.querySelector('#request-form')?.addEventListener('submit', async event => {
-
     event.preventDefault();
-
     const form = event.currentTarget;
-
     const phoneInput = form.elements.namedItem("phone");
-
     const phone = phoneInput.value.trim();
-
     const digits = phone.replace(/\D/g, "");
-
     const validFormat = /^\+?[0-9 ()-]+$/.test(phone);
-
     const validPhone =
       validFormat &&
       digits.length >= 7 &&
       digits.length <= 15;
-
     phoneInput.setCustomValidity(
       validPhone ? "" : "Enter a valid phone number (7–15 digits)."
     );
-
     if (!form.checkValidity()) {
       form.reportValidity();
       return;
     }
-
     const values = Object.fromEntries(new FormData(form));
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (submitButton.disabled) { return; }
+    const originalContent = submitButton.innerHTML;
+    submitButton.disabled = true;
+    submitButton.textContent = "Submitting...";
+    form.setAttribute("aria-busy", "true");
+    const errorBox = form.querySelector("#form-error");
+    if (errorBox) { errorBox.hidden = true; }
     try {
       const record = await api.createRequest(user, values.device, values.description, phone); form.hidden = true; const success = document.querySelector('#request-success'); success.hidden = false; success.innerHTML = `<span class="success-icon">${icon('check', 24)}</span><h2>Request submitted</h2><p>Your request <strong>${e(record.id)}</strong> was created successfully.</p><div class="form-actions">${link('request-details', 'View Request ' + icon('arrow', 17), 'btn btn-primary').replace('href="' + path('request-details') + '"', 'href="' + path('request-details') + '?id=' + encodeURIComponent(record.id) + '"')}${link('client', 'Dashboard', 'btn btn-secondary')}</div>`;
-    } catch (err) { showError(err.message); }
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      submitButton.disabled = false;
+      submitButton.innerHTML = originalContent;
+      form.removeAttribute("aria-busy");
+    }
   });
   document.querySelector('#status-form')?.addEventListener('submit', async event => {
-    event.preventDefault(); try { await api.updateRequest(event.currentTarget.dataset.requestId || new URLSearchParams(location.search).get('id'), document.querySelector('#status').value); toast('Repair status updated.'); setTimeout(() => location.reload(), 500); } catch (err) { toast(err.message, true); }
+    event.preventDefault();
+    const form = event.currentTarget;
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (submitButton.disabled) {
+      return;
+    }
+    const requestId = form.dataset.requestId ||
+      new URLSearchParams(location.search).get("id");
+    const status = form.elements.namedItem("status").value;
+    const originalContent = submitButton.innerHTML;
+    submitButton.disabled = true;
+    submitButton.textContent = "Saving...";
+    form.setAttribute("aria-busy", "true");
+    try {
+      await api.updateRequest(requestId, status);
+      toast("Repair status updated.");
+      setTimeout(() => location.reload(), 500);
+    } catch (err) {
+      toast(err.message, true);
+    } finally {
+      submitButton.disabled = false;
+      submitButton.innerHTML = originalContent;
+      form.removeAttribute("aria-busy");
+    }
   });
+  const staffForm = document.querySelector("#staff-form");
+  if (staffForm) {
+    const addStaffToggle = document.querySelector("#add-staff-toggle");
+    const cancelStaff = document.querySelector("#cancel-staff");
+    addStaffToggle?.addEventListener("click", () => {
+      staffForm.hidden = !staffForm.hidden;
+    });
+    cancelStaff?.addEventListener("click", () => {
+      staffForm.reset();
+      staffForm.hidden = true;
+    });
+    staffForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!staffForm.reportValidity()) {
+        return;
+      }
+      const button = staffForm.querySelector(
+        'button[type="submit"]'
+      );
+      if (!button || button.disabled) {
+        return;
+      }
+      const values = Object.fromEntries(
+        new FormData(staffForm)
+      );
+      const payload = {
+        firstName: values.firstName.trim(),
+        lastName: values.lastName.trim(),
+        email: values.email.trim(),
+        password: values.password,
+        role: values.role
+      };
+      button.disabled = true;
+      button.textContent = "Creating...";
+      try {
+        await api.createStaff(payload);
+        staffForm.reset();
+        staffForm.hidden = true;
+        toast("Staff account created successfully.");
+        setTimeout(() => {
+          location.reload();
+        }, 700);
+      } catch (err) {
+        toast(
+          err?.message || "Failed to create staff account.",
+          true
+        );
+      } finally {
+        button.disabled = false;
+        button.textContent = "Create Staff";
+      }
+    });
+  }
 }
 async function run() {
   initTheme();
@@ -272,9 +1111,28 @@ async function run() {
   if (page === 'register' || page === 'login') { root.innerHTML = authPage(page); hookAuth(page); return; }
   let user; try { user = await api.getCurrentUser(); } catch (err) { root.innerHTML = '<p class="fatal-error">' + e(err.message) + '</p>'; return; }
   if (!user) { location.replace(path('login')); return; }
+  const dashboard = dashboardFor(user);
+  if (!dashboard) { root.textContent = "Unsupported user role."; return; }
   const requiredRole = { client: 'Customer', 'new-request': 'Customer', history: 'Customer', technician: 'Technician', admin: 'Administrator', users: 'Administrator' }[page];
-  if (requiredRole && user.role !== requiredRole) { location.replace(path(user.role === 'Customer' ? 'client' : user.role === 'Technician' ? 'technician' : 'admin')); return; }
-  const [requests, users] = await Promise.all([api.getRequests(), api.getUsers()]);
+  if (requiredRole && user.role !== requiredRole) { location.replace(path(dashboard)); return; }
+  const requests = await api.getRequests();
+  let users = [];
+  if (user.role === "Administrator") {
+    users = await api.getUsers();
+  } else if (user.role === "Technician") {
+    if (USE_MOCK) {
+      users = await api.getUsers();
+    } else {
+      users = requests
+        .filter(r => r.customer && r.userId)
+        .map(r => ({
+          id: r.userId,
+          firstName: r.customer.firstName,
+          lastName: r.customer.lastName,
+          email: r.customer.email
+        }));
+    }
+  }
   if (['client', 'technician', 'admin'].includes(page)) root.innerHTML = roleHome(user, requests, users);
   else if (page === 'new-request') root.innerHTML = newRequestPage(user);
   else if (page === 'requests' || page === 'history') root.innerHTML = requestListPage(user, requests, users);
