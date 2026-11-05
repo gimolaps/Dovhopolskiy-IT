@@ -1,0 +1,18 @@
+
+### Получить всех клиентов
+GET http://localhost:8080/api/customers
+
+###
+
+### Создать нового клиента
+POST http://localhost:8080/api/customers
+Content-Type: application/json
+
+{
+  "firstName": "Adam",
+  "lastName": "Kowalczyk",
+  "phone": "+48 500 123 456",
+  "email": "adam@example.com"
+}
+
+###

@@ -1,0 +1,114 @@
+
+
+GET http://localhost:8080/api/repair-orders
+
+###
+
+
+POST http://localhost:8080/api/repair-orders
+Content-Type: application/json
+
+{
+  "customerId": 2,
+  "deviceType": "Phone",
+  "deviceModel": "iPhone 15",
+  "problemDescription": "Ekran nie działa",
+  "status": "NOWY",
+  "estimatedPrice": 250.00
+}
+
+###
+PATCH http://localhost:8080/api/repair-orders/6/status
+Content-Type: text/plain
+
+
+
+###
+GET http://localhost:8080/api/repair-orders/6
+
+###
+GET http://localhost:8080/api/repair-orders/status/NOWY
+
+###
+GET http://localhost:8080/api/repair-orders/status/W_TRAKCIE
+
+
+###
+
+PUT http://localhost:8080/api/repair-orders/6
+Content-Type: application/json
+
+{
+  "deviceType": "Phone",
+  "deviceModel": "iPhone 15 Pro",
+  "problemDescription": "Wymiana ekranu",
+  "status": "W_TRAKCIE",
+  "estimatedPrice": 300.00
+}
+
+###
+
+DELETE http://localhost:8080/api/repair-orders/6
+
+
+###
+
+POST http://localhost:8080/api/repair-orders
+Content-Type: application/json
+
+{
+  "customer": {
+    "id": 2
+  },
+  "deviceType": "Phone",
+  "deviceModel": "TEST-DELETE-001",
+  "problemDescription": "Test usuwania zamowienia",
+  "status": "NOWY",
+  "estimatedPrice": 1.00
+}
+
+
+###
+
+DELETE http://localhost:8080/api/repair-orders/7
+
+###
+GET http://localhost:8080/api/repair-orders/7
+
+###
+DELETE http://localhost:8080/api/repair-orders/9
+
+###
+GET http://localhost:8080/api/repair-orders/9
+
+###
+GET http://localhost:8080/api/repair-orders/customer/2
+
+###
+
+GET http://localhost:8080/api/repair-orders/status/NOWY
+
+###
+
+GET http://localhost:8080/api/repair-orders/status/W_TRAKCIE
+
+###
+
+GET http://localhost:8080/api/repair-orders/status/COMPLETED
+
+###
+PATCH http://localhost:8080/api/repair-orders/6/status
+Content-Type: text/plain
+
+
+
+###
+PATCH http://localhost:8080/api/repair-orders/2/status
+Content-Type: text/plain
+
+
+
+###
+PATCH http://localhost:8080/api/repair-orders/6/status
+Content-Type: text/plain
+
