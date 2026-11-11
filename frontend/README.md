@@ -106,3 +106,8 @@ frontend/
 - наличие пользовательских элементов каждой роли.
 
 Полный визуальный и end-to-end тест в реальном браузере не проводился. Перед сдачей открой страницы через Live Server и проверь сценарии вручную.
+
+## Project Documentation
+
+- [Project Spreadsheet — Google Sheets](https://docs.google.com/spreadsheets/d/1inh7Rk4_4q0oybNnUDX-OmjzzvvvCTcveQ8imMO8y1s/edit?usp=sharing)
+- [API Contract](API_CONTRACT.md)
